@@ -1,0 +1,11 @@
+mod = [
+	"compare_items"
+]
+
+package = [
+	"resource_packages/compare_items/compare_items"
+]
+
+lua = [
+	"scripts/mods/compare_items/*"
+]
