@@ -5,15 +5,21 @@ local pl = require'pl.import_into'()
 local sup_table = {}
 local sup_property_offset_table1 = {}
 local sup_property_offset_table2 = {}
+local sup_property_offset_adjust_table1 = {}
+local sup_property_offset_adjust_table2 = {}
 local sup_power_offset_table = {}
 local inf_table = {}
 local inf_property_offset_table1 = {}
 local inf_property_offset_table2 = {}
+local inf_property_offset_adjust_table1 = {}
+local inf_property_offset_adjust_table2 = {}
 local inf_power_offset_table = {}
 local dup_table = {}
 local sim_table = {}
 local sim_property_offset_table1 = {}
 local sim_property_offset_table2 = {}
+local sim_property_offset_adjust_table1 = {}
+local sim_property_offset_adjust_table2 = {}
 local sim_power_offset_table = {}
 
 local item_text_style = {
@@ -92,45 +98,6 @@ local function get_rarity_value(rarity)
 	end
 end
 
-local function get_item_property(properties, position)
-	local item_buff_name = ""
-	local index = 1
-	
-	if properties then
-		for property_key, property_value in pairs(properties) do
-			if index == position then
-				local property_data = WeaponProperties.properties[property_key]
-				item_buff_name = property_data.buff_name
-			end
-			index = index + 1
-		end
-	end
-	
-	return item_buff_name
-end
-
-local function get_item_property_value(properties, position)
-	local item_buff_value = 0
-	local index = 1
-	
-	if properties then
-		for property_key, property_value in pairs(properties) do
-			if index == position then
-				local property_data = WeaponProperties.properties[property_key]
-				local buff_name = property_data.buff_name
-				if buff_name == "properties_movespeed" then
-					item_buff_value = 1
-				else
-					item_buff_value = property_value
-				end
-			end
-			index = index + 1
-		end
-	end
-	
-	return item_buff_value
-end
-
 local function get_item_trait(traits)
 	local item_buff_name = ""
 	
@@ -145,10 +112,10 @@ local function get_item_trait(traits)
 end
 
 local function compare_traits(item1, item2)
-	if mod:get("link_on_trait") then
+	if mod:get(mod.SETTING_NAMES.LINK_ON_TRAIT) then
 		local traits1 = item1.traits
 		local traits2 = item2.traits
-				
+		
 		local item1_trait = get_item_trait(traits1)
 		local item2_trait = get_item_trait(traits2)
 		
@@ -159,7 +126,7 @@ local function compare_traits(item1, item2)
 end
 
 local function compare_power(item1, item2)
-	if mod:get("link_on_power") then
+	if mod:get(mod.SETTING_NAMES.LINK_ON_POWER) then
 		return item1.power_level == item2.power_level
 	else
 		return true
@@ -168,7 +135,6 @@ end
 
 local function group_items(items)
 	local groupings = {}
-	local index = 1
 	
 	for _, item1 in pairs(items) do
 		
@@ -185,23 +151,52 @@ local function group_items(items)
 				
 					local properties1 = item1.properties
 					local properties2 = item2.properties
+					
+					local property_data1 = {}
+	
+					if properties1 then
+						for property_key, property_value in pairs(properties1) do
+							table.insert(property_data1, WeaponProperties.properties[property_key])
+						end
+					end
+					
+					local property_data2 = {}
+					
+					if properties2 then
+						for property_key, property_value in pairs(properties2) do
+							table.insert(property_data2, WeaponProperties.properties[property_key])
+						end
+					end
 				
-					local item1_buff_name1 = get_item_property(properties1, 1)
-					local item1_buff_name2 = get_item_property(properties1, 2)
-					local item2_buff_name1 = get_item_property(properties2, 1)
-					local item2_buff_name2 = get_item_property(properties2, 2)
+					local item1_buff_name1 = ""
+					local item1_buff_name2 = ""
+					local item2_buff_name1 = ""
+					local item2_buff_name2 = ""
+				
+					if property_data1[1] then
+						item1_buff_name1 = property_data1[1].buff_name
+					end
+					if property_data1[2] then
+						item1_buff_name2 = property_data1[2].buff_name
+					end
+					if property_data2[1] then
+						item2_buff_name1 = property_data2[1].buff_name
+					end
+					if property_data2[2] then
+						item2_buff_name2 = property_data2[2].buff_name
+					end
 				
 					if item1_buff_name1 == item2_buff_name1 and item1_buff_name2 == item2_buff_name2 then
 						if not table_contains(group, item1) then
-							group[#group+1] = item1
+							table.insert(group, item1)
 						end
-						group[#group+1] = item2
+						table.insert(group, item2)
 					end
 				end
 			end
 			
 			if #group ~= 0 then
-				groupings[#groupings+1] = group
+				table.insert(groupings, group)
 			end
 		end
 	end
@@ -209,10 +204,15 @@ local function group_items(items)
 end
 
 local function get_property_diff(property_data, lerp_value1, lerp_value2)
+	if lerp_value1 == nil or lerp_value2 == nil then
+		return 0
+	end
 	local display_value = nil
 	local description_values = property_data.description_values
 	
-	if description_values then
+	if property_data.buff_name == "properties_movespeed" then
+		return 0
+	elseif description_values then
 		local min_value, max_value = nil
 		local data = description_values[1]
 		local value_type = data.value_type
@@ -238,11 +238,23 @@ local function get_property_diff(property_data, lerp_value1, lerp_value2)
 			display_value = 100 * (display_value - 1)
 		end
 	end
-	
 	return display_value
 end
 
-local function parse_offset(value)
+local function parse_offset_whole(value)
+	local value_str = tostring(value)
+	
+	if value ~= 0 then
+		if value > 0 then
+			value_str = "+"..value_str
+		end
+		return value_str
+	end
+
+	return ""
+end
+
+local function parse_offset_dec(value)
 	local new_value = math.floor(value*10+0.5)
 	local new_value_str = tostring(new_value)
 	
@@ -260,6 +272,46 @@ local function parse_offset(value)
 	end
 
 	return ""
+end
+
+local function adjust_first_offset_position(property_data, buff_value)
+	local adjust = 0
+	
+	if property_data then
+		local buff_name = property_data.buff_name
+		
+		if buff_name == "properties_block_cost" then
+			adjust = -1
+		elseif buff_name == "properties_protection_chaos" or buff_name == "properties_protection_skaven" then
+			if buff_value == 1 then
+				adjust = 1
+			else
+				adjust = -1
+			end
+		elseif buff_name == "properties_protection_aoe" then
+			adjust = 1
+		end
+	end
+	
+	return adjust
+end
+
+local function adjust_second_offset_position(adjust1, property_data)
+	local adjust2 = 0
+	
+	if property_data then
+		local buff_name = property_data.buff_name
+		
+		if buff_name == "properties_block_cost" or buff_name == "properties_protection_chaos" or buff_name == "properties_protection_skaven" or buff_name == "properties_protection_aoe" then
+			adjust2 = 1
+		end
+		
+		if adjust1 > 0 then
+			adjust2 = adjust2 + adjust1
+		end
+	end
+	
+	return adjust2
 end
 
 local is_superior = function(backend_id)
@@ -726,14 +778,14 @@ UITooltipPasses.power_offset = {
 				local offset_inner = inf_power_offset_table[outer_index]
 				local offset = offset_inner[get_table_index(inner, backend_id)]
 				style.text.text_color = Colors.get_color_table_with_alpha("red", 255)
-				content.text = parse_offset(offset)
+				content.text = parse_offset_whole(offset)
 			elseif is_superior(backend_id) then
 				local outer_index = get_outer_table_index(sup_table, backend_id)
 				local inner = sup_table[outer_index]
 				local offset_inner = sup_power_offset_table[outer_index]
 				local offset = offset_inner[get_table_index(inner, backend_id)]
 				style.text.text_color = Colors.get_color_table_with_alpha("green", 255)
-				content.text = parse_offset(offset)
+				content.text = parse_offset_whole(offset)
 			elseif is_similar(backend_id) then
 				local outer_index = get_outer_table_index(sim_table, backend_id)
 				local inner = sim_table[outer_index]
@@ -744,7 +796,7 @@ UITooltipPasses.power_offset = {
 				else
 					style.text.text_color = Colors.get_color_table_with_alpha("red", 255)
 				end
-				content.text = parse_offset(offset)
+				content.text = parse_offset_whole(offset)
 			end
 			
 			local position_x = position[1]
@@ -819,6 +871,8 @@ UITooltipPasses.property1_offset = {
 			return 0
 		end
 		
+		local adjust = 0
+		
 		if is_inferior(backend_id) or is_superior(backend_id) or is_similar(backend_id) then
 			if is_inferior(backend_id) then
 				local outer_index = get_outer_table_index(inf_table, backend_id)
@@ -826,14 +880,18 @@ UITooltipPasses.property1_offset = {
 				local offset_inner = inf_property_offset_table1[outer_index]
 				local offset = offset_inner[get_table_index(inner, backend_id)]
 				style.text.text_color = Colors.get_color_table_with_alpha("red", 255)
-				content.text = parse_offset(offset)
+				local adjust_inner = inf_property_offset_adjust_table1[outer_index]
+				adjust = adjust_inner[get_table_index(inner, backend_id)]
+				content.text = parse_offset_dec(offset)
 			elseif is_superior(backend_id) then
 				local outer_index = get_outer_table_index(sup_table, backend_id)
 				local inner = sup_table[outer_index]
 				local offset_inner = sup_property_offset_table1[outer_index]
 				local offset = offset_inner[get_table_index(inner, backend_id)]
 				style.text.text_color = Colors.get_color_table_with_alpha("green", 255)
-				content.text = parse_offset(offset)
+				local adjust_inner = sup_property_offset_adjust_table1[outer_index]
+				adjust = adjust_inner[get_table_index(inner, backend_id)]
+				content.text = parse_offset_dec(offset)
 			elseif is_similar(backend_id) then
 				local outer_index = get_outer_table_index(sim_table, backend_id)
 				local inner = sim_table[outer_index]
@@ -844,7 +902,9 @@ UITooltipPasses.property1_offset = {
 				else
 					style.text.text_color = Colors.get_color_table_with_alpha("red", 255)
 				end
-				content.text = parse_offset(offset)
+				local adjust_inner = sim_property_offset_adjust_table1[outer_index]
+				adjust = adjust_inner[get_table_index(inner, backend_id)]
+				content.text = parse_offset_dec(offset)
 			end
 			
 			local position_x = position[1]
@@ -862,7 +922,8 @@ UITooltipPasses.property1_offset = {
 			
 			if draw then
 				position[1] = position_x + frame_margin
-				position[2] = position[2] + get_text_height(ui_renderer, text_size, text_style, content, content.text, ui_style_global)
+				local base_height = get_text_height(ui_renderer, text_size, text_style, content, content.text, ui_style_global)
+				position[2] = position[2] + base_height + base_height*adjust
 				text_style.text_color[1] = alpha
 
 				UIPasses.text.draw(ui_renderer, text_pass_data, ui_scenegraph, pass_definition, text_style, content, position, text_size, input_service, dt, ui_style_global)
@@ -919,6 +980,8 @@ UITooltipPasses.property2_offset = {
 			return 0
 		end
 		
+		local adjust = 0
+		
 		if is_inferior(backend_id) or is_superior(backend_id) or is_similar(backend_id) then
 			if is_inferior(backend_id) then
 				local outer_index = get_outer_table_index(inf_table, backend_id)
@@ -926,14 +989,18 @@ UITooltipPasses.property2_offset = {
 				local offset_inner = inf_property_offset_table2[outer_index]
 				local offset = offset_inner[get_table_index(inner, backend_id)]
 				style.text.text_color = Colors.get_color_table_with_alpha("red", 255)
-				content.text = parse_offset(offset)
+				local adjust_inner = inf_property_offset_adjust_table2[outer_index]
+				adjust = adjust_inner[get_table_index(inner, backend_id)]
+				content.text = parse_offset_dec(offset)
 			elseif is_superior(backend_id) then
 				local outer_index = get_outer_table_index(sup_table, backend_id)
 				local inner = sup_table[outer_index]
 				local offset_inner = sup_property_offset_table2[outer_index]
 				local offset = offset_inner[get_table_index(inner, backend_id)]
 				style.text.text_color = Colors.get_color_table_with_alpha("green", 255)
-				content.text = parse_offset(offset)
+				local adjust_inner = sup_property_offset_adjust_table2[outer_index]
+				adjust = adjust_inner[get_table_index(inner, backend_id)]
+				content.text = parse_offset_dec(offset)
 			elseif is_similar(backend_id) then
 				local outer_index = get_outer_table_index(sim_table, backend_id)
 				local inner = sim_table[outer_index]
@@ -944,7 +1011,9 @@ UITooltipPasses.property2_offset = {
 				else
 					style.text.text_color = Colors.get_color_table_with_alpha("red", 255)
 				end
-				content.text = parse_offset(offset)
+				local adjust_inner = sim_property_offset_adjust_table2[outer_index]
+				adjust = adjust_inner[get_table_index(inner, backend_id)]
+				content.text = parse_offset_dec(offset)
 			end
 			
 			local position_x = position[1]
@@ -962,7 +1031,8 @@ UITooltipPasses.property2_offset = {
 			
 			if draw then
 				position[1] = position_x + frame_margin
-				position[2] = position[2] + get_text_height(ui_renderer, text_size, text_style, content, content.text, ui_style_global)*2
+				local base_height = get_text_height(ui_renderer, text_size, text_style, content, content.text, ui_style_global)
+				position[2] = position[2] + base_height*2 + base_height*adjust
 				text_style.text_color[1] = alpha
 
 				UIPasses.text.draw(ui_renderer, text_pass_data, ui_scenegraph, pass_definition, text_style, content, position, text_size, input_service, dt, ui_style_global)
@@ -1151,15 +1221,21 @@ mod:hook(ItemGridUI, "set_item_page", function (func, self, ...)
 	sup_table = {}
 	sup_property_offset_table1 = {}
 	sup_property_offset_table2 = {}
+	sup_property_offset_adjust_table1 = {}
+	sup_property_offset_adjust_table2 = {}
 	sup_power_offset_table = {}
 	inf_table = {}
 	inf_property_offset_table1 = {}
 	inf_property_offset_table2 = {}
+	inf_property_offset_adjust_table1 = {}
+	inf_property_offset_adjust_table2 = {}
 	inf_power_offset_table = {}
 	dup_table = {}
 	sim_table = {}
 	sim_property_offset_table1 = {}
 	sim_property_offset_table2 = {}
+	sim_property_offset_adjust_table1 = {}
+	sim_property_offset_adjust_table2 = {}
 	sim_power_offset_table = {}
 
 	local items = self._items
@@ -1170,15 +1246,21 @@ mod:hook(ItemGridUI, "set_item_page", function (func, self, ...)
 		local superior = {}
 		local superior_property_offset1 = {}
 		local superior_property_offset2 = {}
+		local superior_property_offset_adjust1 = {}
+		local superior_property_offset_adjust2 = {}
 		local superior_power_offset = {}
 		local inferior = {}
 		local inferior_property_offset1 = {}
 		local inferior_property_offset2 = {}
+		local inferior_property_offset_adjust1 = {}
+		local inferior_property_offset_adjust2 = {}
 		local inferior_power_offset = {} 
 		local duplicate = {}
 		local similar = {}
 		local similar_property_offset1 = {}
 		local similar_property_offset2 = {}
+		local similar_property_offset_adjust1 = {}
+		local similar_property_offset_adjust2 = {}
 		local similar_power_offset = {}
 		
 		local max_property1 = -1
@@ -1191,25 +1273,33 @@ mod:hook(ItemGridUI, "set_item_page", function (func, self, ...)
 		for _, item in pairs(group) do
 			local properties = item.properties
 		
-			local item_buff_value1 = get_item_property_value(properties, 1)
-			local item_buff_value2 = get_item_property_value(properties, 2)
+			local property_values = {}
+	
+			if properties then
+				for property_key, property_value in pairs(properties) do
+					table.insert(property_values, property_value)
+				end
+			end
+		
 			local power = item.power_level
 			
-			if item_buff_value1 > max_property1 then
+			if property_values[1] > max_property1 then
 				if max_property1 > next_property1 then
 					next_property1 = max_property1
 				end
-				max_property1 = item_buff_value1
-			elseif item_buff_value1 > next_property1 and item_buff_value1 < max_property1 then
-				next_property1 = item_buff_value1
+				max_property1 = property_values[1]
+			elseif property_values[1] > next_property1 and property_values[1] < max_property1 then
+				next_property1 = property_values[1]
 			end
-			if item_buff_value2 > max_property2 then
-				if max_property2 > next_property2 then
-					next_property2 = max_property2
+			if property_values[2] then
+				if property_values[2] > max_property2 then
+					if max_property2 > next_property2 then
+						next_property2 = max_property2
+					end
+					max_property2 = property_values[2]
+				elseif property_values[2] > next_property2 and property_values[2] < max_property2 then
+					next_property2 = property_values[2]
 				end
-				max_property2 = item_buff_value2
-			elseif item_buff_value2 > next_property2 and item_buff_value2 < max_property2 then
-				next_property2 = item_buff_value2
 			end
 			if power > max_power then
 				if max_power > next_power then
@@ -1233,23 +1323,31 @@ mod:hook(ItemGridUI, "set_item_page", function (func, self, ...)
 		for _, item in pairs(group) do
 			local properties = item.properties
 			
-			local item_buff_value1 = get_item_property_value(properties, 1)
-			local item_buff_value2 = get_item_property_value(properties, 2)
+			local property_data = {}
+			local property_values = {}
+	
+			if properties then
+				for property_key, property_value in pairs(properties) do
+					table.insert(property_data, WeaponProperties.properties[property_key])
+					table.insert(property_values, property_value)
+				end
+			end
+			
 			local power = item.power_level
 			
-			if item_buff_value1 == max_property1 and item_buff_value2 == max_property2 and power == max_power then
-				local item_buff_name1 = get_item_property(properties, 1)
-				local item_buff_name2 = get_item_property(properties, 2)
-				local item_buff_name_short1 = string.sub(item_buff_name1, 12, string.len(item_buff_name1))
-				local item_buff_name_short2 = string.sub(item_buff_name2, 12, string.len(item_buff_name2))
+			if get_property_diff(property_data[1], property_values[1], max_property1) == 0 and get_property_diff(property_data[2], property_values[2], max_property2) == 0 and power == max_power then		
+				local property_offset1 = get_property_diff(property_data[1], property_values[1], next_property1)
+				local property_offset2 = get_property_diff(property_data[2], property_values[2], next_property2)
+				local property_offset_adjust1 = adjust_first_offset_position(property_data[1], property_values[1])
+				local property_offset_adjust2 = adjust_second_offset_position(property_offset_adjust1, property_data[2])
+				local power_offset = power - next_power
 				
-				local property_data1 = WeaponProperties.properties[item_buff_name_short1]
-				local property_data2 = WeaponProperties.properties[item_buff_name_short2]
-				
-				superior[#superior+1] = item.backend_id
-				superior_property_offset1[#superior_property_offset1+1] = get_property_diff(property_data1, item_buff_value1, next_property1)
-				superior_property_offset2[#superior_property_offset2+1] = get_property_diff(property_data2, item_buff_value2, next_property2)
-				superior_power_offset[#superior_power_offset+1] = power - next_power
+				table.insert(superior, item.backend_id)
+				table.insert(superior_property_offset1, property_offset1)
+				table.insert(superior_property_offset2, property_offset2)
+				table.insert(superior_property_offset_adjust1, property_offset_adjust1)
+				table.insert(superior_property_offset_adjust2, property_offset_adjust2)
+				table.insert(superior_power_offset, power_offset)
 			end
 		end
 		
@@ -1259,21 +1357,30 @@ mod:hook(ItemGridUI, "set_item_page", function (func, self, ...)
 				if not table_contains(superior, backend_id) then
 					local properties = item.properties
 		
-					local item_buff_name1 = get_item_property(properties, 1)
-					local item_buff_name2 = get_item_property(properties, 2)
-					local item_buff_name_short1 = string.sub(item_buff_name1, 12, string.len(item_buff_name1))
-					local item_buff_name_short2 = string.sub(item_buff_name2, 12, string.len(item_buff_name2))
-					local item_buff_value1 = get_item_property_value(properties, 1)
-					local item_buff_value2 = get_item_property_value(properties, 2)
+					local property_data = {}
+					local property_values = {}
+		
+					if properties then
+						for property_key, property_value in pairs(properties) do
+							table.insert(property_data, WeaponProperties.properties[property_key])
+							table.insert(property_values, property_value)
+						end
+					end
+					
 					local power = item.power_level
 				
-					local property_data1 = WeaponProperties.properties[item_buff_name_short1]
-					local property_data2 = WeaponProperties.properties[item_buff_name_short2]
-				
-					inferior[#inferior+1] = backend_id
-					inferior_property_offset1[#inferior_property_offset1+1] = get_property_diff(property_data1, item_buff_value1, max_property1)
-					inferior_property_offset2[#inferior_property_offset2+1] = get_property_diff(property_data2, item_buff_value2, max_property2)
-					inferior_power_offset[#inferior_power_offset+1] = power - max_power
+					local property_offset1 = get_property_diff(property_data[1], property_values[1], max_property1)
+					local property_offset2 = get_property_diff(property_data[2], property_values[2], max_property2)
+					local property_offset_adjust1 = adjust_first_offset_position(property_data[1], property_values[1])
+					local property_offset_adjust2 = adjust_second_offset_position(property_offset_adjust1, property_data[2])
+					local power_offset = power - max_power
+					
+					table.insert(inferior, backend_id)
+					table.insert(inferior_property_offset1, property_offset1)
+					table.insert(inferior_property_offset2, property_offset2)
+					table.insert(inferior_property_offset_adjust1, property_offset_adjust1)
+					table.insert(inferior_property_offset_adjust2, property_offset_adjust2)
+					table.insert(inferior_power_offset, power_offset)
 				end
 			end
 			
@@ -1297,64 +1404,99 @@ mod:hook(ItemGridUI, "set_item_page", function (func, self, ...)
 						local properties1 = item1.properties
 						local properties2 = item2.properties
 				
-						local item1_buff_value1 = get_item_property_value(properties1, 1)
-						local item1_buff_value2 = get_item_property_value(properties1, 2)
-						local power1 = item1.power_level
+						local property_data1 = {}
+						local property_values1 = {}
+		
+						if properties1 then
+							for property_key, property_value in pairs(properties1) do
+								table.insert(property_data1, WeaponProperties.properties[property_key])
+								table.insert(property_values1, property_value)
+							end
+						end
 						
-						local item2_buff_value1 = get_item_property_value(properties2, 1)
-						local item2_buff_value2 = get_item_property_value(properties2, 2)
+						local property_data2 = {}
+						local property_values2 = {}
+		
+						if properties2 then
+							for property_key, property_value in pairs(properties2) do
+								table.insert(property_data2, WeaponProperties.properties[property_key])
+								table.insert(property_values2, property_value)
+							end
+						end
+				
+						local power1 = item1.power_level
 						local power2 = item2.power_level
 					
-						if item1_buff_value1 == item2_buff_value1 and item1_buff_value2 == item2_buff_value2 and power1 == power2 then
+						if get_property_diff(property_data1[1], property_values1[1], property_values2[1]) == 0 and get_property_diff(property_data1[2], property_values1[2], property_values2[2]) == 0 and power1 == power2 then
 							if not table_contains(duplicate, backend_id1) then
-								duplicate[#duplicate+1] = backend_id1
+								table.insert(duplicate, backend_id1)
 							end
 							if not table_contains(duplicate, backend_id2) then
-								duplicate[#duplicate+1] = backend_id2
+								table.insert(duplicate, backend_id2)
 							end
 						else
-							local item_buff_name1 = get_item_property(properties1, 1)
-							local item_buff_name2 = get_item_property(properties1, 2)
-							local item_buff_name_short1 = string.sub(item_buff_name1, 12, string.len(item_buff_name1))
-							local item_buff_name_short2 = string.sub(item_buff_name2, 12, string.len(item_buff_name2))
-							local property_data1 = WeaponProperties.properties[item_buff_name_short1]
-							local property_data2 = WeaponProperties.properties[item_buff_name_short2]
-							
 							if not table_contains(similar, backend_id1) then
-								similar[#similar+1] = backend_id1
-								if item1_buff_value1 == max_property1 then
-									similar_property_offset1[#similar_property_offset1+1] = get_property_diff(property_data1, item1_buff_value1, next_property1)
+								table.insert(similar, backend_id1)
+								
+								local property_offset1 = 0
+								local property_offset2 = 0
+								local power_offset = 0
+								if get_property_diff(property_data1[1], property_values1[1], max_property1) == 0 then
+									property_offset1 = get_property_diff(property_data1[1], property_values1[1], next_property1)
 								else
-									similar_property_offset1[#similar_property_offset1+1] = get_property_diff(property_data1, item1_buff_value1, max_property1)
+									property_offset1 = get_property_diff(property_data1[1], property_values1[1], max_property1)
 								end
-								if item1_buff_value2 == max_property2 then
-									similar_property_offset2[#similar_property_offset2+1] = get_property_diff(property_data2, item1_buff_value2, next_property2)
+								if get_property_diff(property_data1[2], property_values1[2], max_property2) == 0 then
+									property_offset2 = get_property_diff(property_data1[2], property_values1[2], next_property2)
 								else
-									similar_property_offset2[#similar_property_offset2+1] = get_property_diff(property_data2, item1_buff_value2, max_property2)
+									property_offset2 = get_property_diff(property_data1[2], property_values1[2], max_property2)
 								end
 								if power1 == max_power then
-									similar_power_offset[#similar_power_offset+1] = power1 - next_power
+									power_offset = power1 - next_power
 								else
-									similar_power_offset[#similar_power_offset+1] = power1 - max_power
+									power_offset = power1 - max_power
 								end
+								
+								local property_offset_adjust1 = adjust_first_offset_position(property_data1[1], property_values1[1])
+								local property_offset_adjust2 = adjust_second_offset_position(property_offset_adjust1, property_data1[2])
+
+								table.insert(similar_property_offset1, property_offset1)
+								table.insert(similar_property_offset2, property_offset2)
+								table.insert(similar_property_offset_adjust1, property_offset_adjust1)
+								table.insert(similar_property_offset_adjust2, property_offset_adjust2)
+								table.insert(similar_power_offset, power_offset)
 							end
 							if not table_contains(similar, backend_id2) then								
-								similar[#similar+1] = backend_id2
-								if item2_buff_value1 == max_property1 then
-									similar_property_offset1[#similar_property_offset1+1] = get_property_diff(property_data1, item2_buff_value1, next_property1)
+								table.insert(similar, backend_id2)
+								
+								local property_offset1 = 0
+								local property_offset2 = 0
+								local power_offset = 0
+								
+								if get_property_diff(property_data2[1], property_values2[1], max_property1) == 0 then
+									property_offset1 = get_property_diff(property_data2[1], property_values2[1], next_property1)
 								else
-									similar_property_offset1[#similar_property_offset1+1] = get_property_diff(property_data1, item2_buff_value1, max_property1)
+									property_offset1 = get_property_diff(property_data2[1], property_values2[1], max_property1)
 								end
-								if item2_buff_value2 == max_property2 then
-									similar_property_offset2[#similar_property_offset2+1] = get_property_diff(property_data2, item2_buff_value2, next_property2)
+								if get_property_diff(property_data2[2], property_values2[2], max_property2) == 0 then
+									property_offset2 = get_property_diff(property_data2[2], property_values2[2], next_property2)
 								else
-									similar_property_offset2[#similar_property_offset2+1] = get_property_diff(property_data2, item2_buff_value2, max_property2)
+									property_offset2 = get_property_diff(property_data2[2], property_values2[2], max_property2)
 								end
-								if power1 == max_power and next_power ~= 0 then
-									similar_power_offset[#similar_power_offset+1] = power2 - next_power
+								if power2 == max_power then
+									power_offset = power2 - next_power
 								else
-									similar_power_offset[#similar_power_offset+1] = power2 - max_power
+									power_offset = power2 - max_power
 								end
+								
+								local property_offset_adjust1 = adjust_first_offset_position(property_data2[1], property_values2[1])
+								local property_offset_adjust2 = adjust_second_offset_position(property_offset_adjust1, property_data2[2])
+
+								table.insert(similar_property_offset1, property_offset1)
+								table.insert(similar_property_offset2, property_offset2)
+								table.insert(similar_property_offset_adjust1, property_offset_adjust1)
+								table.insert(similar_property_offset_adjust2, property_offset_adjust2)
+								table.insert(similar_power_offset, power_offset)
 							end
 						end
 					end	
@@ -1362,19 +1504,28 @@ mod:hook(ItemGridUI, "set_item_page", function (func, self, ...)
 			end
 		end
 		
-		sup_table[#sup_table+1] = superior
-		sup_property_offset_table1[#sup_property_offset_table1 +1] = superior_property_offset1
-		sup_property_offset_table2[#sup_property_offset_table2+1] = superior_property_offset2
-		sup_power_offset_table[#sup_power_offset_table+1] = superior_power_offset
-		inf_table[#inf_table+1] = inferior
-		inf_property_offset_table1[#inf_property_offset_table1 +1] = inferior_property_offset1
-		inf_property_offset_table2[#inf_property_offset_table2+1] = inferior_property_offset2
-		inf_power_offset_table[#inf_power_offset_table+1] = inferior_power_offset
-		dup_table[#dup_table+1] = duplicate
-		sim_table[#sim_table+1] = similar
-		sim_property_offset_table1[#sim_property_offset_table1+1] = similar_property_offset1
-		sim_property_offset_table2[#sim_property_offset_table2+1] = similar_property_offset2
-		sim_power_offset_table[#sim_power_offset_table+1] = similar_power_offset
+		table.insert(sup_table, superior)
+		table.insert(sup_property_offset_table1, superior_property_offset1)
+		table.insert(sup_property_offset_table2, superior_property_offset2)
+		table.insert(sup_property_offset_adjust_table1, superior_property_offset_adjust1)
+		table.insert(sup_property_offset_adjust_table2, superior_property_offset_adjust2)
+		table.insert(sup_power_offset_table, superior_power_offset)
+		
+		table.insert(inf_table, inferior)
+		table.insert(inf_property_offset_table1, inferior_property_offset1)
+		table.insert(inf_property_offset_table2, inferior_property_offset2)
+		table.insert(inf_property_offset_adjust_table1, inferior_property_offset_adjust1)
+		table.insert(inf_property_offset_adjust_table2, inferior_property_offset_adjust2)
+		table.insert(inf_power_offset_table, inferior_power_offset)
+		
+		table.insert(dup_table, duplicate)
+		
+		table.insert(sim_table, similar)
+		table.insert(sim_property_offset_table1, similar_property_offset1)
+		table.insert(sim_property_offset_table2, similar_property_offset2)
+		table.insert(sim_property_offset_adjust_table1, similar_property_offset_adjust1)
+		table.insert(sim_property_offset_adjust_table2, similar_property_offset_adjust2)
+		table.insert(sim_power_offset_table, similar_power_offset)
 	end
 		
 	func(self, ...)
@@ -1395,7 +1546,7 @@ mod:hook(UIPasses.item_tooltip, "init", function(func, pass_definition, ui_conte
 			data = UITooltipPasses.property1_offset.setup_data(),
 			draw = UITooltipPasses.property1_offset.draw
 		})
-	table.insert(pass_data.passes, 13, { -- 12 is after power, 13 is after the properties! max is 27
+	table.insert(pass_data.passes, 13, {
 			data = UITooltipPasses.property2_offset.setup_data(),
 			draw = UITooltipPasses.property2_offset.draw
 		})

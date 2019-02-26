@@ -1,6 +1,9 @@
 return {
+	mod_name = {
+		en = "Compare Items",
+	},
 	mod_description = {
-		en = "Compares items automatically",
+		en = "Automatically compares any items with the same property types.",
 	},
 	link_on_trait_text = {
 		en = "Link On Trait",
@@ -38,7 +41,7 @@ return {
 		it = "Collega oggetti simili al loro livello di potenza.",        -- Italian
 		pl = "Łączy podobne elementy na ich poziomie mocy.",        -- Polish
 	},
-	some_other_text_id = {
+	--[[some_other_text_id = {
 		en = "Translation",        -- English
 		fr = "Translation",        -- French
 		de = "Translation",        -- German
@@ -47,5 +50,5 @@ return {
 		it = "Translation",        -- Italian
 		pl = "Translation",        -- Polish
 		["br-pt"] = "Translation", -- Portuguese-Brazil
-	},
+	},]]
 }
