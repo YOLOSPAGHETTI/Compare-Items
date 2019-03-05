@@ -8,19 +8,31 @@ local sup_property_offset_table2 = {}
 local sup_property_offset_adjust_table1 = {}
 local sup_property_offset_adjust_table2 = {}
 local sup_power_offset_table = {}
+
 local inf_table = {}
 local inf_property_offset_table1 = {}
 local inf_property_offset_table2 = {}
 local inf_property_offset_adjust_table1 = {}
 local inf_property_offset_adjust_table2 = {}
 local inf_power_offset_table = {}
+
 local dup_table = {}
+
 local sim_table = {}
 local sim_property_offset_table1 = {}
 local sim_property_offset_table2 = {}
 local sim_property_offset_adjust_table1 = {}
 local sim_property_offset_adjust_table2 = {}
 local sim_power_offset_table = {}
+
+local ind_inf_power_table = {}
+local ind_inf_power_offset_table = {}
+
+local ind_inf_property_table = {}
+local ind_inf_property_offset_table1 = {}
+local ind_inf_property_offset_table2 = {}
+local ind_inf_property_offset_adjust_table1 = {}
+local ind_inf_property_offset_adjust_table2 = {}
 
 local item_text_style = {
 	font_size = 18,
@@ -133,74 +145,27 @@ local function compare_power(item1, item2)
 	end
 end
 
-local function group_items(items)
-	local groupings = {}
+local function compare_property_perc(percentage, property_data)
+	if percentage == nil then
+		return false
+	end
+	if property_data.buff_name == "properties_movespeed" then
+		return false
+	end
 	
-	for _, item1 in pairs(items) do
-		
-		if not two_dim_table_contains(groupings, item1) then
-			local data1 = item1.data
-			local backend_id1 = item1.backend_id
-			local group = {}
-			
-			for _, item2 in pairs(items) do
-				local data2 = item2.data
-				local backend_id2 = item2.backend_id
-			
-				if backend_id1 ~= backend_id2 and data1.item_type == data2.item_type and compare_power(item1, item2) and compare_traits(item1, item2) then
-				
-					local properties1 = item1.properties
-					local properties2 = item2.properties
-					
-					local property_data1 = {}
+	local min_property_perc = mod:get(mod.SETTING_NAMES.MINIMUM_PROPERTY_PERC)/100
 	
-					if properties1 then
-						for property_key, property_value in pairs(properties1) do
-							table.insert(property_data1, WeaponProperties.properties[property_key])
-						end
-					end
-					
-					local property_data2 = {}
-					
-					if properties2 then
-						for property_key, property_value in pairs(properties2) do
-							table.insert(property_data2, WeaponProperties.properties[property_key])
-						end
-					end
-				
-					local item1_buff_name1 = ""
-					local item1_buff_name2 = ""
-					local item2_buff_name1 = ""
-					local item2_buff_name2 = ""
-				
-					if property_data1[1] then
-						item1_buff_name1 = property_data1[1].buff_name
-					end
-					if property_data1[2] then
-						item1_buff_name2 = property_data1[2].buff_name
-					end
-					if property_data2[1] then
-						item2_buff_name1 = property_data2[1].buff_name
-					end
-					if property_data2[2] then
-						item2_buff_name2 = property_data2[2].buff_name
-					end
-				
-					if item1_buff_name1 == item2_buff_name1 and item1_buff_name2 == item2_buff_name2 then
-						if not table_contains(group, item1) then
-							table.insert(group, item1)
-						end
-						table.insert(group, item2)
-					end
-				end
-			end
-			
-			if #group ~= 0 then
-				table.insert(groupings, group)
-			end
+	if property_data.buff_name == "properties_crit_chance" then
+		if percentage >= 0.75 then
+			return 1 < min_property_perc
+		elseif percentage >= 0.25 then
+			return 0.5 < min_property_perc
+		else
+			return 0 < min_property_perc
 		end
 	end
-	return groupings
+	
+	return percentage < min_property_perc
 end
 
 local function get_property_diff(property_data, lerp_value1, lerp_value2)
@@ -274,6 +239,16 @@ local function parse_offset_dec(value)
 	return ""
 end
 
+local function parse_tooltip(text)
+	if mod:get(mod.SETTING_NAMES.LINK_ON_TRAIT) then
+		text = text.."/trait"
+	end
+	if mod:get(mod.SETTING_NAMES.LINK_ON_POWER) then
+		text = text.."/power"
+	end
+	return text
+end
+
 local function adjust_first_offset_position(property_data, buff_value)
 	local adjust = 0
 	
@@ -314,8 +289,126 @@ local function adjust_second_offset_position(adjust1, property_data)
 	return adjust2
 end
 
+local function group_items(items)
+	local groupings = {}
+	
+	for _, item1 in pairs(items) do
+		if item1.rarity ~= "default" then
+			local data1 = item1.data
+			local backend_id1 = item1.backend_id
+			local properties1 = item1.properties
+		
+			local property_data1 = {}
+			local property_values1 = {}
+		
+			if properties1 then
+				for property_key, property_value in pairs(properties1) do
+					table.insert(property_data1, WeaponProperties.properties[property_key])
+					table.insert(property_values1, property_value)
+				end
+			end
+			
+			local power = item1.power_level
+			local min_power = mod:get(mod.SETTING_NAMES.MINIMUM_POWER)
+			local inf_power = min_power > power
+			local inf_property = compare_property_perc(property_values1[1], property_data1[1]) or compare_property_perc(property_values1[2], property_data1[2])
+		
+			if inf_power then
+				local power_offset = power - min_power
+			
+				table.insert(ind_inf_power_table, backend_id1)
+				table.insert(ind_inf_power_offset_table, power_offset)
+			end
+			if inf_property then
+				local min_property = mod:get(mod.SETTING_NAMES.MINIMUM_PROPERTY_PERC)/100
+				local property_offset1 = get_property_diff(property_data1[1], property_values1[1], min_property)
+				local property_offset2 = get_property_diff(property_data1[2], property_values1[2], min_property)
+				local property_offset_adjust1 = adjust_first_offset_position(property_data1[1], property_values1[1])
+				local property_offset_adjust2 = adjust_second_offset_position(property_offset_adjust1, property_data1[2])
+				
+				table.insert(ind_inf_property_table, backend_id1)
+				if property_offset1 < 0 then
+					table.insert(ind_inf_property_offset_table1, property_offset1)
+				else
+					table.insert(ind_inf_property_offset_table1, 0)
+				end
+				if property_offset2 < 0 then
+					table.insert(ind_inf_property_offset_table2, property_offset2)
+				else
+					table.insert(ind_inf_property_offset_table2, 0)
+				end
+				table.insert(ind_inf_property_offset_adjust_table1, property_offset_adjust1)
+				table.insert(ind_inf_property_offset_adjust_table2, property_offset_adjust2)
+			end
+			if not two_dim_table_contains(groupings, item1) and not inf_power and not inf_property then
+				local group = {}
+				
+				for _, item2 in pairs(items) do
+					local data2 = item2.data
+					local backend_id2 = item2.backend_id
+				
+					if backend_id1 ~= backend_id2 and data1.item_type == data2.item_type and compare_power(item1, item2) and compare_traits(item1, item2) then
+				
+						local properties2 = item2.properties
+							
+						local property_data2 = {}
+						
+						if properties2 then
+							for property_key, property_value in pairs(properties2) do
+								table.insert(property_data2, WeaponProperties.properties[property_key])
+							end
+						end
+					
+						local item1_buff_name1 = ""
+						local item1_buff_name2 = ""
+						local item2_buff_name1 = ""
+						local item2_buff_name2 = ""
+					
+						if property_data1[1] then
+							item1_buff_name1 = property_data1[1].buff_name
+						end
+						if property_data1[2] then
+							item1_buff_name2 = property_data1[2].buff_name
+						end
+						if property_data2[1] then
+							item2_buff_name1 = property_data2[1].buff_name
+						end
+						if property_data2[2] then
+							item2_buff_name2 = property_data2[2].buff_name
+						end
+						
+						if item1_buff_name1 == item2_buff_name1 and item1_buff_name2 == item2_buff_name2 then
+							if not table_contains(group, item1) then
+								table.insert(group, item1)
+							end
+							table.insert(group, item2)
+						end
+					end
+				end
+			
+				if #group ~= 0 then
+					table.insert(groupings, group)
+				end
+			end
+		end
+	end
+	return groupings
+end
+
 local is_superior = function(backend_id)
 	return two_dim_table_contains(sup_table, backend_id)
+end
+
+local is_inferior_power = function(backend_id)
+	return table_contains(ind_inf_power_table, backend_id)
+end
+
+local is_inferior_property = function(backend_id)
+	return table_contains(ind_inf_property_table, backend_id)
+end
+
+local is_individual_inferior = function(backend_id)
+	return is_inferior_power(backend_id) or is_inferior_property(backend_id)
 end
 
 local is_inferior = function(backend_id)
@@ -334,6 +427,13 @@ mod.remove_passes = function(self, widget)
 	local passes = widget.element.passes
 	
 	widget.element.dirty = true
+	local ind_inf_pass_index = nil
+	for i, pass in ipairs(passes) do
+		if pass.text_id == "text_ind_inf" then
+			ind_inf_pass_index = i
+			break
+		end
+	end
 	local inf_pass_index = nil
 	for i, pass in ipairs(passes) do
 		if pass.text_id == "text_inf" then
@@ -369,6 +469,9 @@ mod.remove_passes = function(self, widget)
 			break
 		end
 	end
+	if ind_inf_pass_index then
+		table.remove(passes, ind_inf_pass_index)
+	end
 	if inf_pass_index then
 		table.remove(passes, inf_pass_index)
 	end
@@ -388,7 +491,7 @@ mod.remove_passes = function(self, widget)
 	mod:pcall(function()
 		new_passes = pl.seq(passes):filter(
 			function(pass)
-				return not pass.text_id or pass.text_id ~= 'text_inf' or pass.text_id ~= 'text_sup_dup' or pass.text_id ~= 'text_sup' or pass.text_id ~= 'text_dup' or pass.text_id ~= 'text_sim'
+				return not pass.text_id or pass.text_id ~= 'text_ind_inf' or pass.text_id ~= 'text_inf' or pass.text_id ~= 'text_sup_dup' or pass.text_id ~= 'text_sup' or pass.text_id ~= 'text_dup' or pass.text_id ~= 'text_sim'
 			end):copy()
 	end)
 
@@ -416,36 +519,38 @@ mod.create_passes = function(self, widget)
 				local sup_style_key = "text_sup_" .. tostring(i) .. "_" .. tostring(k)
 				local dup_style_key = "text_dup_" .. tostring(i) .. "_" .. tostring(k)
 				local sim_style_key = "text_sim_" .. tostring(i) .. "_" .. tostring(k)
-
+				local item_icon_key = "item_icon_" .. tostring(i) .. "_" .. tostring(k)
+				
 				widget.style[inf_style_key] = table.clone(item_text_style)
 				widget.style[sup_style_key] = table.clone(item_text_style)
 				widget.style[dup_style_key] = table.clone(item_text_style)
 				widget.style[sim_style_key] = table.clone(item_text_style)
 
-				widget.style[inf_style_key].offset = table.clone(widget.style["item_icon_" .. tostring(i) .. "_" .. tostring(k)].offset)
+				widget.style[inf_style_key].offset = table.clone(widget.style[item_icon_key].offset)
 				widget.style[inf_style_key].offset[1] = widget.style[inf_style_key].offset[1] + 8
 				widget.style[inf_style_key].offset[2] = widget.style[inf_style_key].offset[2] + 41
 				widget.style[inf_style_key].offset[3] = 10
 				widget.style[inf_style_key].text_color = Colors.get_color_table_with_alpha("red", 255)
 				
-				widget.style[sup_style_key].offset = table.clone(widget.style["item_icon_" .. tostring(i) .. "_" .. tostring(k)].offset)
+				widget.style[sup_style_key].offset = table.clone(widget.style[item_icon_key].offset)
 				widget.style[sup_style_key].offset[1] = widget.style[sup_style_key].offset[1] + 8
 				widget.style[sup_style_key].offset[2] = widget.style[sup_style_key].offset[2] + 41
 				widget.style[sup_style_key].offset[3] = 10
 				widget.style[sup_style_key].text_color = Colors.get_color_table_with_alpha("green", 255)
 				
-				widget.style[dup_style_key].offset = table.clone(widget.style["item_icon_" .. tostring(i) .. "_" .. tostring(k)].offset)
+				widget.style[dup_style_key].offset = table.clone(widget.style[item_icon_key].offset)
 				widget.style[dup_style_key].offset[1] = widget.style[dup_style_key].offset[1] + 8
 				widget.style[dup_style_key].offset[2] = widget.style[dup_style_key].offset[2] + 41
 				widget.style[dup_style_key].offset[3] = 10
 				widget.style[dup_style_key].text_color = Colors.get_color_table_with_alpha("white", 255)
 				
-				widget.style[sim_style_key].offset = table.clone(widget.style["item_icon_" .. tostring(i) .. "_" .. tostring(k)].offset)
+				widget.style[sim_style_key].offset = table.clone(widget.style[item_icon_key].offset)
 				widget.style[sim_style_key].offset[1] = widget.style[sim_style_key].offset[1] + 8
 				widget.style[sim_style_key].offset[2] = widget.style[sim_style_key].offset[2] + 41
 				widget.style[sim_style_key].offset[3] = 10
 				widget.style[sim_style_key].text_color = Colors.get_color_table_with_alpha("yellow", 255)
-					
+				
+				widget.content[item_key].text_ind_inf = "-"
 				if is_inferior(backend_id) then
 					widget.content[item_key].text_inf = "-"..get_outer_table_index(inf_table, backend_id)
 				else
@@ -471,14 +576,27 @@ mod.create_passes = function(self, widget)
 				else
 					widget.content[item_key].text_sim = "~"
 				end
-					
+				
+				passes[#passes + 1] = {
+					text_id = "text_ind_inf",
+					content_id = item_key,
+					pass_type = "text",
+					style_id = inf_style_key,
+					content_check_function = function(content)
+						return is_individual_inferior(content.backend_id)
+					end,
+				}
+				widget.element.pass_data[#passes] = {
+					text_id = "text_ind_inf",
+					content_id = item_key,
+				}	
 				passes[#passes + 1] = {
 					text_id = "text_inf",
 					content_id = item_key,
 					pass_type = "text",
 					style_id = inf_style_key,
 					content_check_function = function(content)
-						return is_inferior(content.backend_id)
+						return is_inferior(content.backend_id) and not is_individual_inferior(content.backend_id)
 					end,
 				}
 				widget.element.pass_data[#passes] = {
@@ -491,7 +609,7 @@ mod.create_passes = function(self, widget)
 					pass_type = "text",
 					style_id = sup_style_key,
 					content_check_function = function(content)
-						return is_superior(content.backend_id) and is_duplicate(content.backend_id)
+						return is_superior(content.backend_id) and is_duplicate(content.backend_id) and not is_individual_inferior(content.backend_id)
 					end,
 				}
 				widget.element.pass_data[#passes] = {
@@ -504,7 +622,7 @@ mod.create_passes = function(self, widget)
 					pass_type = "text",
 					style_id = sup_style_key,
 					content_check_function = function(content)
-						return is_superior(content.backend_id) and not is_duplicate(content.backend_id)
+						return is_superior(content.backend_id) and not is_duplicate(content.backend_id) and not is_individual_inferior(content.backend_id)
 					end,
 				}
 				widget.element.pass_data[#passes] = {
@@ -517,7 +635,7 @@ mod.create_passes = function(self, widget)
 					pass_type = "text",
 					style_id = dup_style_key,
 					content_check_function = function(content)
-						return is_duplicate(content.backend_id) and not is_superior(content.backend_id)
+						return is_duplicate(content.backend_id) and not is_superior(content.backend_id) and not is_individual_inferior(content.backend_id)
 					end,
 				}
 				widget.element.pass_data[#passes] = {
@@ -530,7 +648,7 @@ mod.create_passes = function(self, widget)
 					pass_type = "text",
 					style_id = sim_style_key,
 					content_check_function = function(content)
-						return is_similar(content.backend_id)
+						return is_similar(content.backend_id) and not is_individual_inferior(content.backend_id)
 					end,
 				}
 				widget.element.pass_data[#passes] = {
@@ -572,6 +690,7 @@ mod:hook(HeroWindowLoadoutInventory, "update", function (func, self, ...)
 		widget.style.text_sim = table.clone(item_text_style)
 	end
 	
+	widget.content.text_ind_inf = "-"
 	widget.content.text_inf = "-"
 	widget.content.text_sup_dup = "+="
 	widget.content.text_sup = "+"
@@ -685,19 +804,26 @@ UITooltipPasses.title = {
 			return 0
 		end
 		
-		if is_inferior(backend_id) or is_superior(backend_id) or is_duplicate(backend_id) or is_similar(backend_id) then
-			if is_inferior(backend_id) then
+		if is_individual_inferior(backend_id) or is_inferior(backend_id) or is_superior(backend_id) or is_duplicate(backend_id) or is_similar(backend_id) then
+			if is_individual_inferior(backend_id) then
+				content.text = "Inferior"
+				style.text.text_color = Colors.get_color_table_with_alpha("red", 255)
+			elseif is_inferior(backend_id) then
 				content.text = "Inferior ("..get_outer_table_index(inf_table, backend_id)..")"
+				style.text.text_color = Colors.get_color_table_with_alpha("red", 255)
 			elseif is_superior(backend_id) then
 				if is_duplicate(backend_id) then
 					content.text = "Superior ("..get_outer_table_index(sup_table, backend_id)..") / Duplicate ("..get_outer_table_index(dup_table, backend_id)..")"
 				else
 					content.text = "Superior ("..get_outer_table_index(sup_table, backend_id)..")"
 				end
+				style.text.text_color = Colors.get_color_table_with_alpha("green", 255)
 			elseif is_duplicate(backend_id) then
 				content.text = "Duplicate ("..get_outer_table_index(dup_table, backend_id)..")"
+				style.text.text_color = Colors.get_color_table_with_alpha("white", 255)
 			elseif is_similar(backend_id) then
 				content.text = "Similar ("..get_outer_table_index(sim_table, backend_id)..")"
+				style.text.text_color = Colors.get_color_table_with_alpha("yellow", 255)
 			end
 			
 			local position_x = position[1]
@@ -771,8 +897,12 @@ UITooltipPasses.power_offset = {
 			return 0
 		end
 		
-		if is_inferior(backend_id) or is_superior(backend_id) or is_similar(backend_id) then
-			if is_inferior(backend_id) then
+		if is_inferior_power(backend_id) or is_inferior(backend_id) or is_superior(backend_id) or is_similar(backend_id) then
+			if is_inferior_power(backend_id) then
+				local offset = ind_inf_power_offset_table[get_table_index(ind_inf_power_table, backend_id)]
+				style.text.text_color = Colors.get_color_table_with_alpha("red", 255)
+				content.text = parse_offset_whole(offset)
+			elseif is_inferior(backend_id) then
 				local outer_index = get_outer_table_index(inf_table, backend_id)
 				local inner = inf_table[outer_index]
 				local offset_inner = inf_power_offset_table[outer_index]
@@ -873,37 +1003,46 @@ UITooltipPasses.property1_offset = {
 		
 		local adjust = 0
 		
-		if is_inferior(backend_id) or is_superior(backend_id) or is_similar(backend_id) then
-			if is_inferior(backend_id) then
+		if is_inferior_property(backend_id) or is_inferior(backend_id) or is_superior(backend_id) or is_similar(backend_id) then
+			if is_inferior_property(backend_id) then
+				local index = get_table_index(ind_inf_property_table, backend_id)
+				local offset = ind_inf_property_offset_table1[index]
+				style.text.text_color = Colors.get_color_table_with_alpha("red", 255)
+				adjust = ind_inf_property_offset_adjust_table1[index]
+				content.text = parse_offset_dec(offset)
+			elseif is_inferior(backend_id) then
 				local outer_index = get_outer_table_index(inf_table, backend_id)
 				local inner = inf_table[outer_index]
+				local inner_index = get_table_index(inner, backend_id)
 				local offset_inner = inf_property_offset_table1[outer_index]
-				local offset = offset_inner[get_table_index(inner, backend_id)]
+				local offset = offset_inner[inner_index]
 				style.text.text_color = Colors.get_color_table_with_alpha("red", 255)
 				local adjust_inner = inf_property_offset_adjust_table1[outer_index]
-				adjust = adjust_inner[get_table_index(inner, backend_id)]
+				adjust = adjust_inner[inner_index]
 				content.text = parse_offset_dec(offset)
 			elseif is_superior(backend_id) then
 				local outer_index = get_outer_table_index(sup_table, backend_id)
 				local inner = sup_table[outer_index]
+				local inner_index = get_table_index(inner, backend_id)
 				local offset_inner = sup_property_offset_table1[outer_index]
-				local offset = offset_inner[get_table_index(inner, backend_id)]
+				local offset = offset_inner[inner_index]
 				style.text.text_color = Colors.get_color_table_with_alpha("green", 255)
 				local adjust_inner = sup_property_offset_adjust_table1[outer_index]
-				adjust = adjust_inner[get_table_index(inner, backend_id)]
+				adjust = adjust_inner[inner_index]
 				content.text = parse_offset_dec(offset)
 			elseif is_similar(backend_id) then
 				local outer_index = get_outer_table_index(sim_table, backend_id)
 				local inner = sim_table[outer_index]
+				local inner_index = get_table_index(inner, backend_id)
 				local offset_inner = sim_property_offset_table1[outer_index]
-				local offset = offset_inner[get_table_index(inner, backend_id)]
+				local offset = offset_inner[inner_index]
 				if offset > 0 then
 					style.text.text_color = Colors.get_color_table_with_alpha("green", 255)
 				else
 					style.text.text_color = Colors.get_color_table_with_alpha("red", 255)
 				end
 				local adjust_inner = sim_property_offset_adjust_table1[outer_index]
-				adjust = adjust_inner[get_table_index(inner, backend_id)]
+				adjust = adjust_inner[inner_index]
 				content.text = parse_offset_dec(offset)
 			end
 			
@@ -982,37 +1121,46 @@ UITooltipPasses.property2_offset = {
 		
 		local adjust = 0
 		
-		if is_inferior(backend_id) or is_superior(backend_id) or is_similar(backend_id) then
-			if is_inferior(backend_id) then
+		if is_inferior_property(backend_id) or is_inferior(backend_id) or is_superior(backend_id) or is_similar(backend_id) then
+			if is_inferior_property(backend_id) then
+				local index = get_table_index(ind_inf_property_table, backend_id)
+				local offset = ind_inf_property_offset_table2[index]
+				style.text.text_color = Colors.get_color_table_with_alpha("red", 255)
+				adjust = ind_inf_property_offset_adjust_table2[index]
+				content.text = parse_offset_dec(offset)
+			elseif is_inferior(backend_id) then
 				local outer_index = get_outer_table_index(inf_table, backend_id)
 				local inner = inf_table[outer_index]
+				local inner_index = get_table_index(inner, backend_id)
 				local offset_inner = inf_property_offset_table2[outer_index]
-				local offset = offset_inner[get_table_index(inner, backend_id)]
+				local offset = offset_inner[inner_index]
 				style.text.text_color = Colors.get_color_table_with_alpha("red", 255)
 				local adjust_inner = inf_property_offset_adjust_table2[outer_index]
-				adjust = adjust_inner[get_table_index(inner, backend_id)]
+				adjust = adjust_inner[inner_index]
 				content.text = parse_offset_dec(offset)
 			elseif is_superior(backend_id) then
 				local outer_index = get_outer_table_index(sup_table, backend_id)
 				local inner = sup_table[outer_index]
+				local inner_index = get_table_index(inner, backend_id)
 				local offset_inner = sup_property_offset_table2[outer_index]
-				local offset = offset_inner[get_table_index(inner, backend_id)]
+				local offset = offset_inner[inner_index]
 				style.text.text_color = Colors.get_color_table_with_alpha("green", 255)
 				local adjust_inner = sup_property_offset_adjust_table2[outer_index]
-				adjust = adjust_inner[get_table_index(inner, backend_id)]
+				adjust = adjust_inner[inner_index]
 				content.text = parse_offset_dec(offset)
 			elseif is_similar(backend_id) then
 				local outer_index = get_outer_table_index(sim_table, backend_id)
 				local inner = sim_table[outer_index]
+				local inner_index = get_table_index(inner, backend_id)
 				local offset_inner = sim_property_offset_table2[outer_index]
-				local offset = offset_inner[get_table_index(inner, backend_id)]
+				local offset = offset_inner[inner_index]
 				if offset > 0 then
 					style.text.text_color = Colors.get_color_table_with_alpha("green", 255)
 				else
 					style.text.text_color = Colors.get_color_table_with_alpha("red", 255)
 				end
 				local adjust_inner = sim_property_offset_adjust_table2[outer_index]
-				adjust = adjust_inner[get_table_index(inner, backend_id)]
+				adjust = adjust_inner[inner_index]
 				content.text = parse_offset_dec(offset)
 			end
 			
@@ -1143,23 +1291,42 @@ UITooltipPasses.advanced_input_helper = {
 		end
 
 		local backend_id = item.backend_id
-
-		if is_inferior(backend_id) then
-			content.text = "Inferior to other item(s)" -- with the same properties/trait
+		
+		if is_inferior_power(backend_id) then
+			if is_inferior_property(backend_id) then
+				content.text = "Inferior power level and properties compared to the minimums"
+			else
+				content.text = "Inferior power level compared to the minimum"
+			end
+			style.text.text_color = Colors.get_color_table_with_alpha("red", 255)
+		elseif is_inferior_property(backend_id) then
+			content.text = "Inferior properties compared to the minimum percentage"
+			style.text.text_color = Colors.get_color_table_with_alpha("red", 255)
+		elseif is_inferior(backend_id) then
+			content.text = parse_tooltip("Inferior to other item(s) with the same properties")
+			style.text.text_color = Colors.get_color_table_with_alpha("red", 255)
 		elseif is_superior(backend_id) then
 			if is_duplicate(backend_id) then
-				content.text = "Superior to and a duplicate of other item(s)" -- with the same properties/trait
+				content.text = parse_tooltip("Superior to and a duplicate of other item(s) with the same properties")
 			else
-				content.text = "Superior to other item(s)" -- with the same properties/trait
+				content.text = parse_tooltip("Superior to other item(s) with the same properties")
 			end
+			style.text.text_color = Colors.get_color_table_with_alpha("green", 255)
 		elseif is_duplicate(backend_id) then
-			content.text = "A duplicate of other item(s)" -- with the same properties/trait
+			content.text = parse_tooltip("A duplicate of other item(s) with the same properties")
+			style.text.text_color = Colors.get_color_table_with_alpha("white", 255)
 		elseif is_similar(backend_id) then
-			content.text = "Similar to other item(s)" --  with the same properties/trait
+			content.text = parse_tooltip("Similar to other item(s) with the same properties")
+			style.text.text_color = Colors.get_color_table_with_alpha("yellow", 255)
 		else
 			return 0
 		end
 
+		local long = false
+		if string.len(content.text) > 55 then
+			long = true
+		end
+		
 		if true then
 			local text_style = style.text
 			local text_pass_data = data.text_pass_data
@@ -1175,11 +1342,15 @@ UITooltipPasses.advanced_input_helper = {
 			local frame_pass_definition = data.frame_pass_definition
 			local frame_content = data.content
 			local frame_style = data.style.frame
-			frame_size[1] = text_size[1]
-			frame_size[2] = text_size[2] + frame_margin/2
+			frame_size[1] = text_size[1] + frame_margin*2
+			if long then
+				frame_size[2] = text_size[2] + frame_margin*5
+			else
+				frame_size[2] = text_size[2] + frame_margin/2
+			end
 			total_height = total_height + frame_size[2]
 			position[2] = position[2] - frame_size[2] - frame_margin/2
-			position[1] = position[1] + frame_margin
+			position[1] = position[1]
 			local old_y_position = position[2]
 
 			if draw then
@@ -1198,7 +1369,11 @@ UITooltipPasses.advanced_input_helper = {
 				position[3] = position[3] + 1
 			end
 
-			position[2] = old_y_position + frame_margin/4
+			if long then
+				position[2] = old_y_position + frame_margin*2 + frame_margin/2
+			else
+				position[2] = old_y_position + frame_margin/4
+			end
 			text_size[1] = frame_size[1]
 
 			if draw then
@@ -1224,13 +1399,16 @@ mod:hook(ItemGridUI, "set_item_page", function (func, self, ...)
 	sup_property_offset_adjust_table1 = {}
 	sup_property_offset_adjust_table2 = {}
 	sup_power_offset_table = {}
+	
 	inf_table = {}
 	inf_property_offset_table1 = {}
 	inf_property_offset_table2 = {}
 	inf_property_offset_adjust_table1 = {}
 	inf_property_offset_adjust_table2 = {}
 	inf_power_offset_table = {}
+	
 	dup_table = {}
+	
 	sim_table = {}
 	sim_property_offset_table1 = {}
 	sim_property_offset_table2 = {}

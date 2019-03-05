@@ -3,6 +3,8 @@ local mod = get_mod("compare_items")
 mod.SETTING_NAMES = {
 	LINK_ON_TRAIT = "link_on_trait_text",
 	LINK_ON_POWER = "link_on_power_text",
+	MINIMUM_POWER = "minimum_power_text",
+	MINIMUM_PROPERTY_PERC = "minimum_property_percentage_text",
 }
 
 return {
@@ -22,6 +24,20 @@ return {
 				type = "checkbox",
 				tooltip = "link_on_power_tip",
 				default_value = true
+			},
+			{
+				setting_id = mod.SETTING_NAMES.MINIMUM_POWER,
+				type = "numeric",
+				tooltip = "minimum_power_tip",
+				default_value = 5,
+				range = {5, 300}
+			},
+			{
+				setting_id = mod.SETTING_NAMES.MINIMUM_PROPERTY_PERC,
+				type = "numeric",
+				tooltip = "minimum_property_percentage_tip",
+				default_value = 0,
+				range = {0, 100}
 			}
 		}
 	}

@@ -41,6 +41,42 @@ return {
 		it = "Collega oggetti simili al loro livello di potenza.",        -- Italian
 		pl = "Łączy podobne elementy na ich poziomie mocy.",        -- Polish
 	},
+	minimum_power_text = {
+		en = "Minimum Power",
+		--[[fr = "Lien sur le pouvoir",        -- French
+		de = "Verbindung bei Strom",        -- German
+		es = "Enlace en el poder",        -- Spanish
+		ru = "Ссылка на мощность",        -- Russian
+		it = "Link sul potere",        -- Italian
+		pl = "Link do zasilania",        -- Polish]]
+	},
+	minimum_power_tip = {
+		en = "Sets the minimum power an item can be before it is considered inferior.",
+		--[[fr = "Liens des objets similaires sur leur niveau de puissance.",        -- French
+		de = "Verknüpft ähnliche Elemente auf ihrer Leistungsstufe.",        -- German
+		es = "Enlaces artículos similares en su nivel de poder.",        -- Spanish
+		ru = "Связывает похожие предметы по уровню мощности.",        -- Russian
+		it = "Collega oggetti simili al loro livello di potenza.",        -- Italian
+		pl = "Łączy podobne elementy na ich poziomie mocy.",        -- Polish]]
+	},
+	minimum_property_percentage_text = {
+		en = "Minimum Property Percentage",
+		--[[fr = "Lien sur le pouvoir",        -- French
+		de = "Verbindung bei Strom",        -- German
+		es = "Enlace en el poder",        -- Spanish
+		ru = "Ссылка на мощность",        -- Russian
+		it = "Link sul potere",        -- Italian
+		pl = "Link do zasilania",        -- Polish]]
+	},
+	minimum_property_percentage_tip = {
+		en = "Sets the minimum percentage of the property range a value can be before it is considered inferior.",
+		--[[fr = "Liens des objets similaires sur leur niveau de puissance.",        -- French
+		de = "Verknüpft ähnliche Elemente auf ihrer Leistungsstufe.",        -- German
+		es = "Enlaces artículos similares en su nivel de poder.",        -- Spanish
+		ru = "Связывает похожие предметы по уровню мощности.",        -- Russian
+		it = "Collega oggetti simili al loro livello di potenza.",        -- Italian
+		pl = "Łączy podobne elementy na ich poziomie mocy.",        -- Polish]]
+	},
 	--[[some_other_text_id = {
 		en = "Translation",        -- English
 		fr = "Translation",        -- French
